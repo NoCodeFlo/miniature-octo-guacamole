@@ -1,85 +1,161 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 
-const names = ['Hannsi', 'Flowsi', 'Hannsi', 'Flowsi', 'Hannsi', 'Flowsi', 'Hannsi', 'Flowsi'];
+const SEGMENTS = [
+  'Hannsi', 'Flowsi', 'Gemeinsam', 'Hannsi',
+  'Flowsi', 'Gemeinsam', 'Hannsi', 'Flowsi',
+];
+const COLORS = [
+  '#EF4444', '#3B82F6', '#22C55E', '#F87171',
+  '#60A5FA', '#4ADE80', '#F87171', '#60A5FA',
+];
 
-export default function Who() {
-  const wheelRef = useRef<HTMLDivElement>(null);
+const SIZE = 300; // SVG viewBox size
+const CENTER = SIZE / 2;
+const RADIUS = SIZE / 2 - 10;
+
+function getCoordinatesForAngle(angle: number, radius = RADIUS) {
+  const rad = (angle - 90) * (Math.PI / 180);
+  return {
+    x: CENTER + radius * Math.cos(rad),
+    y: CENTER + radius * Math.sin(rad),
+  };
+}
+
+export default function SpinningWheel() {
   const [spinning, setSpinning] = useState(false);
-  const [angle, setAngle] = useState(0);
+  const [rotation, setRotation] = useState(0);
+  const [result, setResult] = useState<string | null>(null);
+  const wheelRef = useRef<SVGSVGElement>(null);
 
   const spin = () => {
     if (spinning) return;
-
     setSpinning(true);
+    setResult(null);
 
-    // Spin at least 3 full turns, then land randomly in 8 slices
-    const fullRotations = 3 * 360;
-    const randomOffset = Math.floor(Math.random() * 8) * 45;
-    const totalRotation = fullRotations + randomOffset;
+    // Choose a random segment (0..7)
+    const segmentIdx = Math.floor(Math.random() * SEGMENTS.length);
 
-    const nextAngle = angle + totalRotation;
+    // Number of full spins (for visual effect)
+    const fullSpins = 5 * 360;
+    // Offset so that the winning segment lands at the pointer (top, i.e. -90deg)
+    const segmentAngle = 360 / SEGMENTS.length;
+    const randomRotation = segmentIdx * segmentAngle + segmentAngle / 2;
+    const targetRotation = fullSpins + (360 - randomRotation);
 
-    setAngle(nextAngle);
+    // Spin with CSS transition
+    setRotation(targetRotation);
 
-    if (wheelRef.current) {
-      wheelRef.current.style.transition = 'transform 3.5s cubic-bezier(0.25, 1, 0.3, 1)';
-      wheelRef.current.style.transform = `rotate(${nextAngle}deg)`;
-    }
-
-    setTimeout(() => setSpinning(false), 3500);
+    setTimeout(() => {
+      setSpinning(false);
+      setResult(SEGMENTS[segmentIdx]);
+    }, 4000); // Duration should match CSS transition
   };
 
   return (
     <div className="flex flex-col items-center">
       <h1 className="text-3xl font-bold mb-6">Who Will Be Cooking Tonight? 👩‍🍳👨‍🍳</h1>
-
-      <div className="relative w-[300px] h-[300px] rounded-full border-[10px] border-gray-200 mb-8">
-        <div
-          ref={wheelRef}
-          className="absolute inset-0 rounded-full origin-center"
-          style={{ transition: 'transform 0s' }}
+      <div style={{ position: 'relative', width: SIZE, height: SIZE }}>
+        {/* Pointer */}
+        <svg
+          width={SIZE}
+          height={30}
+          style={{ position: 'absolute', top: -30, left: 0, zIndex: 2, pointerEvents: 'none' }}
         >
-          {names.map((name, i) => {
-            const rotation = i * 45;
+          <polygon
+            points={`${CENTER - 15},30 ${CENTER + 15},30 ${CENTER},2`}
+            fill="#111"
+          />
+        </svg>
+        {/* Wheel */}
+        <svg
+          ref={wheelRef}
+          width={SIZE}
+          height={SIZE}
+          viewBox={`0 0 ${SIZE} ${SIZE}`}
+          style={{
+            transition: spinning
+              ? 'transform 3.8s cubic-bezier(0.25, 1, 0.3, 1)'
+              : undefined,
+            transform: `rotate(${rotation}deg)`,
+            borderRadius: '50%',
+            boxShadow: '0 2px 24px #0001',
+            background: '#fff',
+          }}
+        >
+          {/* Wheel segments */}
+          {SEGMENTS.map((label, i) => {
+            const startAngle = (360 / SEGMENTS.length) * i;
+            const endAngle = startAngle + 360 / SEGMENTS.length;
+
+            const start = getCoordinatesForAngle(startAngle);
+            const end = getCoordinatesForAngle(endAngle);
+
+            // Large arc flag is always 0 since 360/8 < 180
+            const d = [
+              `M ${CENTER} ${CENTER}`,
+              `L ${start.x} ${start.y}`,
+              `A ${RADIUS} ${RADIUS} 0 0 1 ${end.x} ${end.y}`,
+              'Z',
+            ].join(' ');
+
+            // Label angle (middle of wedge)
+            const textAngle = startAngle + (360 / SEGMENTS.length) / 2;
+
+            const labelPos = getCoordinatesForAngle(textAngle, RADIUS * 0.65);
+
             return (
-              <div
-                key={i}
-                className="absolute w-1/2 h-1/2 left-1/2 top-1/2 origin-left rotate-[--angle]"
-                style={{
-                  transform: `rotate(${rotation}deg) translateX(-50%)`,
-                  transformOrigin: 'left center',
-                }}
-              >
-                <div
-                  className={`text-sm text-white font-semibold text-center py-1 px-2 rounded-full ${
-                    name === 'Hannsi' ? 'bg-red-400' : 'bg-blue-400'
-                  }`}
+              <g key={i}>
+                <path
+                  d={d}
+                  fill={COLORS[i]}
+                  stroke="#fff"
+                  strokeWidth={2}
+                />
+                <text
+                  x={labelPos.x}
+                  y={labelPos.y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={18}
+                  fill="#fff"
+                  fontWeight="bold"
                   style={{
-                    transform: 'rotate(-22.5deg) translateX(80px)',
-                    display: 'inline-block',
-                    width: '80px',
+                    userSelect: 'none',
+                    transform: `rotate(0deg)`,
                   }}
                 >
-                  {name}
-                </div>
-              </div>
+                  {label}
+                </text>
+              </g>
             );
           })}
-        </div>
-
-        {/* Spinner pointer */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[10px] border-r-[10px] border-b-[20px] border-transparent border-b-black" />
+          {/* Outer border */}
+          <circle
+            cx={CENTER}
+            cy={CENTER}
+            r={RADIUS}
+            fill="none"
+            stroke="#e5e7eb"
+            strokeWidth={7}
+          />
+        </svg>
       </div>
-
       <button
+        className="bg-black text-white py-2 px-6 rounded-full text-lg mt-10 hover:bg-gray-800 disabled:opacity-50 transition"
+        style={{ minWidth: 160 }}
         onClick={spin}
         disabled={spinning}
-        className="bg-black text-white py-2 px-6 rounded-full text-lg hover:bg-gray-800 disabled:opacity-50 transition"
       >
         {spinning ? 'Spinning...' : 'Spin the Wheel'}
       </button>
+      {result && (
+        <div className="mt-8 text-2xl font-semibold">
+          <span className="mr-2">🎉</span>
+          {result} will be cooking tonight!
+        </div>
+      )}
     </div>
   );
 }
